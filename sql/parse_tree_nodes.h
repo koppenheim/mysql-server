@@ -685,7 +685,8 @@ public:
 
     if (opt_select_lock_type.is_set)
     {
-      pc->select->set_lock_for_tables(opt_select_lock_type.lock_type);
+      pc->select->set_lock_for_tables(opt_select_lock_type.lock_type,
+                                      opt_select_lock_type.skip_locked);
       pc->thd->lex->safe_to_cache_query=
         opt_select_lock_type.is_safe_to_cache_query;
     }
@@ -2258,7 +2259,7 @@ public:
 
     if (opt_select_lock_type.is_set)
     {
-      pc->select->set_lock_for_tables(opt_select_lock_type.lock_type);
+      pc->select->set_lock_for_tables(opt_select_lock_type.lock_type, opt_select_lock_type.skip_locked);
       pc->thd->lex->safe_to_cache_query=
         opt_select_lock_type.is_safe_to_cache_query;
     }

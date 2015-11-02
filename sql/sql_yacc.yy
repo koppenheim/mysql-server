@@ -757,6 +757,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, YYLTYPE **c, ulong *yystacksize);
 %token  LOCATOR_SYM                   /* SQL-2003-N */
 %token  LOCKS_SYM
 %token  LOCK_SYM
+%token  LOCKED_SYM
 %token  LOGFILE_SYM
 %token  LOGS_SYM
 %token  LONGBLOB
@@ -981,6 +982,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, YYLTYPE **c, ulong *yystacksize);
 %token  SIGNAL_SYM                    /* SQL-2003-R */
 %token  SIGNED_SYM
 %token  SIMPLE_SYM                    /* SQL-2003-N */
+%token  SKIP_SYM
 %token  SLAVE
 %token  SLOW
 %token  SMALLINT                      /* SQL-2003-R */
@@ -9115,17 +9117,26 @@ select_option:
 
 opt_select_lock_type:
           /* empty */ { $$.is_set= false; }
+        | FOR_SYM UPDATE_SYM SKIP_SYM LOCKED_SYM
+          {
+            $$.is_set= true;
+            $$.lock_type= TL_WRITE;
+            $$.is_safe_to_cache_query= false;
+            $$.skip_locked= true;
+          }
         | FOR_SYM UPDATE_SYM
           {
             $$.is_set= true;
             $$.lock_type= TL_WRITE;
             $$.is_safe_to_cache_query= false;
+            $$.skip_locked= false;
           }
         | LOCK_SYM IN_SYM SHARE_SYM MODE_SYM
           {
             $$.is_set= true;
             $$.lock_type= TL_READ_WITH_SHARED_LOCKS;
             $$.is_safe_to_cache_query= false;
+            $$.skip_locked= false;
           }
         ;
 

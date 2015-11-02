@@ -356,15 +356,19 @@ lock_rec_move_low(
 Checks if locks of other transactions prevent an immediate modify (update,
 delete mark, or delete unmark) of a clustered index record. If they do,
 first tests if the query thread should anyway be suspended for some
-reason; if not, then puts the transaction and the query thread to the
+reason; if not puts the transaction and the query thread to the
 lock wait state and inserts a waiting request for a record x-lock to the
-lock queue.
-@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, or DB_QUE_THR_SUSPENDED */
+lock queue, unless no_wait==TRUE. If no_wait==TRUE and lock wait is
+required then DB_LOCKING_SKIPPED is returned instead.
+@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, DB_QUE_THR_SUSPENDED, 
+or DB_LOCKING_SKIPPED */
 dberr_t
 lock_clust_rec_modify_check_and_lock(
 /*=================================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: record which should be
 					modified */
@@ -373,14 +377,17 @@ lock_clust_rec_modify_check_and_lock(
 	que_thr_t*		thr)	/*!< in: query thread */
 	__attribute__((warn_unused_result));
 /*********************************************************************//**
-Checks if locks of other transactions prevent an immediate modify
-(delete mark or delete unmark) of a secondary index record.
-@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, or DB_QUE_THR_SUSPENDED */
+Checks if locks of other transactions prevent an immediate modify (delete
+mark or delete unmark) of a secondary index record.
+@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, DB_QUE_THR_SUSPENDED, 
+or DB_LOCKING_SKIPPED */
 dberr_t
 lock_sec_rec_modify_check_and_lock(
 /*===============================*/
 	ulint		flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 				bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	buf_block_t*	block,	/*!< in/out: buffer block of rec */
 	const rec_t*	rec,	/*!< in: record which should be
 				modified; NOTE: as this is a secondary
@@ -396,12 +403,14 @@ lock_sec_rec_modify_check_and_lock(
 Like lock_clust_rec_read_check_and_lock(), but reads a
 secondary index record.
 @return DB_SUCCESS, DB_SUCCESS_LOCKED_REC, DB_LOCK_WAIT, DB_DEADLOCK,
-or DB_QUE_THR_SUSPENDED */
+DB_QUE_THR_SUSPENDED, or DB_LOCKING_SKIPPED */
 dberr_t
 lock_sec_rec_read_check_and_lock(
 /*=============================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: user record or page
 					supremum record which should
@@ -422,15 +431,18 @@ Checks if locks of other transactions prevent an immediate read, or passing
 over by a read cursor, of a clustered index record. If they do, first tests
 if the query thread should anyway be suspended for some reason; if not, then
 puts the transaction and the query thread to the lock wait state and inserts a
-waiting request for a record lock to the lock queue. Sets the requested mode
-lock on the record.
+waiting request for a record lock to the lock queue, unless no_wait==TRUE. 
+If no_wait==TRUE and lock wait is required then DB_LOCKING_SKIPPED is returned
+instead. Sets the requested mode lock on the record.
 @return DB_SUCCESS, DB_SUCCESS_LOCKED_REC, DB_LOCK_WAIT, DB_DEADLOCK,
-or DB_QUE_THR_SUSPENDED */
+DB_QUE_THR_SUSPENDED, or DB_LOCKING_SKIPPED */
 dberr_t
 lock_clust_rec_read_check_and_lock(
 /*===============================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: user record or page
 					supremum record which should
@@ -455,12 +467,15 @@ waiting request for a record lock to the lock queue. Sets the requested mode
 lock on the record. This is an alternative version of
 lock_clust_rec_read_check_and_lock() that does not require the parameter
 "offsets".
-@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, or DB_QUE_THR_SUSPENDED */
+@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, DB_QUE_THR_SUSPENDED,
+or DB_LOCKING_SKIPPED */
 dberr_t
 lock_clust_rec_read_check_and_lock_alt(
 /*===================================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: user record or page
 					supremum record which should

@@ -736,7 +736,7 @@ bool PT_update::contextualize(Parse_context *pc)
     be too pessimistic. We will decrease lock level if possible in
     mysql_multi_update().
   */
-  pc->select->set_lock_for_tables(opt_low_priority);
+  pc->select->set_lock_for_tables(opt_low_priority, FALSE);
 
   if (opt_where_clause != NULL &&
       opt_where_clause->itemize(pc, &opt_where_clause))
@@ -891,7 +891,7 @@ bool PT_insert::contextualize(Parse_context *pc)
   {
     return true;
   }
-  pc->select->set_lock_for_tables(lock_option);
+  pc->select->set_lock_for_tables(lock_option, FALSE);
 
   DBUG_ASSERT(lex->current_select() == lex->select_lex);
 

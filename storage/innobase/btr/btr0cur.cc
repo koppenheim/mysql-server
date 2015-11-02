@@ -3540,7 +3540,7 @@ btr_cur_upd_lock_and_undo(
 		/* We do undo logging only when we update a clustered index
 		record */
 		return(lock_sec_rec_modify_check_and_lock(
-			       flags, btr_cur_get_block(cursor), rec,
+			       flags, false, btr_cur_get_block(cursor), rec,
 			       index, thr, mtr));
 	}
 
@@ -3549,7 +3549,7 @@ btr_cur_upd_lock_and_undo(
 
 	if (!(flags & BTR_NO_LOCKING_FLAG)) {
 		err = lock_clust_rec_modify_check_and_lock(
-			flags, btr_cur_get_block(cursor), rec, index,
+			flags, false, btr_cur_get_block(cursor), rec, index,
 			offsets, thr);
 		if (err != DB_SUCCESS) {
 			return(err);
@@ -4835,8 +4835,8 @@ btr_cur_del_mark_set_clust_rec(
 		return(DB_SUCCESS);
 	}
 
-	err = lock_clust_rec_modify_check_and_lock(BTR_NO_LOCKING_FLAG, block,
-						   rec, index, offsets, thr);
+	err = lock_clust_rec_modify_check_and_lock(BTR_NO_LOCKING_FLAG, false,
+						   block, rec, index, offsets, thr);
 
 	if (err != DB_SUCCESS) {
 
@@ -4986,7 +4986,7 @@ btr_cur_del_mark_set_sec_rec(
 	block = btr_cur_get_block(cursor);
 	rec = btr_cur_get_rec(cursor);
 
-	err = lock_sec_rec_modify_check_and_lock(flags,
+	err = lock_sec_rec_modify_check_and_lock(flags, false,
 						 btr_cur_get_block(cursor),
 						 rec, cursor->index, thr, mtr);
 	if (err != DB_SUCCESS) {

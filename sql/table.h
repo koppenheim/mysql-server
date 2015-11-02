@@ -1235,6 +1235,8 @@ public:
     class JOIN_TAB *join_tab;
     class QEP_TAB *qep_tab;
     enum thr_lock_type lock_type;		/* How table is used */
+    bool skip_locked;				/* Used by SELECT ... FOR 
+						UPDATE SKIP LOCKED */
     bool not_exists_optimize;
     /*
       TRUE <=> range optimizer found that there is no rows satisfying
@@ -2401,6 +2403,8 @@ private:
 public:
   bool		straight;		/* optimize with prev table */
   bool          updating;               /* for replicate-do/ignore table */
+  bool          skip_locked;            /* ignore locked rows; used by
+                                           SELECT ... FOR UPDATE SKIP LOCKED */
   bool		force_index;		/* prefer index over table scan */
   bool          ignore_leaves;          /* preload only non-leaf nodes */
   table_map     dep_tables;             /* tables the table depends on      */

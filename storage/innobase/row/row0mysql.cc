@@ -959,6 +959,7 @@ row_create_prebuilt(
 
 	prebuilt->select_lock_type = LOCK_NONE;
 	prebuilt->stored_select_lock_type = LOCK_NONE_UNSET;
+	prebuilt->select_skip_locked = FALSE;
 
 	prebuilt->search_tuple = dtuple_create(heap, search_tuple_n_fields);
 

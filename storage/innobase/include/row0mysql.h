@@ -776,6 +776,9 @@ struct row_prebuilt_t {
 					that was decided in ha_innodb.cc,
 					::store_lock(), ::external_lock(),
 					etc. */
+	unsigned	select_skip_locked;/*!< TRUE if locked records should
+					be skipped as in SELECT .. FOR UPDATE
+					SKIP LOCKED.*/
 	ulint		row_read_type;	/*!< ROW_READ_WITH_LOCKS if row locks
 					should be the obtained for records
 					under an UPDATE or DELETE cursor.

@@ -70,7 +70,8 @@ build_query(const POS &pos,
   {
     false, /* is_set */
     TL_READ, /* lock_type */
-    false /* is_safe_to_cache_query */
+    false, /* is_safe_to_cache_query */
+    false  /* skip_locked */
   };
 
   /* ... VARIABLE_NAME ... */

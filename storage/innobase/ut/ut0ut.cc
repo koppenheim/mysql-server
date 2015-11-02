@@ -771,6 +771,8 @@ ut_strerr(
 		return("Failed, retry will not succeed");
 	case DB_ZIP_OVERFLOW:
 		return("Zip overflow");
+	case DB_LOCKING_SKIPPED:
+		return("record lock skipped");
 	case DB_RECORD_NOT_FOUND:
 		return("Record not found");
 	case DB_CHILD_NO_INDEX:

@@ -175,6 +175,10 @@ enum dberr_t {
 	DB_UNDERFLOW,
 	DB_STRONG_FAIL,
 	DB_ZIP_OVERFLOW,
+	DB_LOCKING_SKIPPED,		/*!< Record lock skipped because a
+					lock wait was required, but NO WAIT
+					or SKIPPED LOCKS was used */
+
 	DB_RECORD_NOT_FOUND = 1500,
 	DB_END_OF_INDEX,
 	DB_NOT_FOUND,			/*!< Generic error code for "Not found"

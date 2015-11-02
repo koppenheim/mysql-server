@@ -2142,6 +2142,8 @@ lock_rec_lock_fast(
 	ulint			mode,	/*!< in: lock mode: LOCK_X or
 					LOCK_S possibly ORed to either
 					LOCK_GAP or LOCK_REC_NOT_GAP */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block containing
 					the record */
 	ulint			heap_no,/*!< in: heap number of record */
@@ -2211,7 +2213,7 @@ low-level function which does NOT look at implicit locks! Checks lock
 compatibility within explicit locks. This function sets a normal next-key
 lock, or in the case of a page supremum record, a gap type lock.
 @return DB_SUCCESS, DB_SUCCESS_LOCKED_REC, DB_LOCK_WAIT, DB_DEADLOCK,
-or DB_QUE_THR_SUSPENDED */
+DB_QUE_THR_SUSPENDED, or DB_LOCKING_SKIPPED */
 static
 dberr_t
 lock_rec_lock_slow(
@@ -2223,6 +2225,8 @@ lock_rec_lock_slow(
 	ulint			mode,	/*!< in: lock mode: LOCK_X or
 					LOCK_S possibly ORed to either
 					LOCK_GAP or LOCK_REC_NOT_GAP */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block containing
 					the record */
 	ulint			heap_no,/*!< in: heap number of record */
@@ -2263,14 +2267,18 @@ lock_rec_lock_slow(
 
 		if (wait_for != NULL) {
 
-			/* If another transaction has a non-gap conflicting
-			request in the queue, as this transaction does not
-			have a lock strong enough already granted on the
-			record, we may have to wait. */
+			if (no_wait) {
+				err = DB_LOCKING_SKIPPED;
+			} else {
+				/* If another transaction has a non-gap conflicting
+				request in the queue, as this transaction does not
+				have a lock strong enough already granted on the
+				record, we may have to wait. */
 
-			RecLock	rec_lock(thr, index, block, heap_no, mode);
+				RecLock	rec_lock(thr, index, block, heap_no, mode);
 
-			err = rec_lock.add_to_waitq(wait_for);
+				err = rec_lock.add_to_waitq(wait_for);
+			}
 
 		} else if (!impl) {
 
@@ -2294,12 +2302,12 @@ lock_rec_lock_slow(
 
 /*********************************************************************//**
 Tries to lock the specified record in the mode requested. If not immediately
-possible, enqueues a waiting lock request. This is a low-level function
-which does NOT look at implicit locks! Checks lock compatibility within
-explicit locks. This function sets a normal next-key lock, or in the case
-of a page supremum record, a gap type lock.
+possible, enqueues a waiting lock request unless no_wait==TRUE. This is a 
+low-level function which does NOT look at implicit locks! Checks lock 
+compatibility within explicit locks. This function sets a normal next-key
+lock, or in the case of a page supremum record, a gap type lock.
 @return DB_SUCCESS, DB_SUCCESS_LOCKED_REC, DB_LOCK_WAIT, DB_DEADLOCK,
-or DB_QUE_THR_SUSPENDED */
+DB_QUE_THR_SUSPENDED, or DB_LOCKING_SKIPPED */
 static
 dberr_t
 lock_rec_lock(
@@ -2311,6 +2319,8 @@ lock_rec_lock(
 	ulint			mode,	/*!< in: lock mode: LOCK_X or
 					LOCK_S possibly ORed to either
 					LOCK_GAP or LOCK_REC_NOT_GAP */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block containing
 					the record */
 	ulint			heap_no,/*!< in: heap number of record */
@@ -2332,13 +2342,13 @@ lock_rec_lock(
 
 	/* We try a simplified and faster subroutine for the most
 	common cases */
-	switch (lock_rec_lock_fast(impl, mode, block, heap_no, index, thr)) {
+	switch (lock_rec_lock_fast(impl, mode, no_wait, block, heap_no, index, thr)) {
 	case LOCK_REC_SUCCESS:
 		return(DB_SUCCESS);
 	case LOCK_REC_SUCCESS_CREATED:
 		return(DB_SUCCESS_LOCKED_REC);
 	case LOCK_REC_FAIL:
-		return(lock_rec_lock_slow(impl, mode, block,
+		return(lock_rec_lock_slow(impl, mode, no_wait, block,
 					  heap_no, index, thr));
 	}
 
@@ -5982,15 +5992,19 @@ lock_rec_convert_impl_to_expl(
 Checks if locks of other transactions prevent an immediate modify (update,
 delete mark, or delete unmark) of a clustered index record. If they do,
 first tests if the query thread should anyway be suspended for some
-reason; if not, then puts the transaction and the query thread to the
+reason; if not puts the transaction and the query thread to the
 lock wait state and inserts a waiting request for a record x-lock to the
-lock queue.
-@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, or DB_QUE_THR_SUSPENDED */
+lock queue, unless no_wait==TRUE. If no_wait==TRUE and lock wait is
+required then DB_LOCKING_SKIPPED is returned instead.
+@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, DB_QUE_THR_SUSPENDED, 
+or DB_LOCKING_SKIPPED */
 dberr_t
 lock_clust_rec_modify_check_and_lock(
 /*=================================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+							return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: record which should be
 					modified */
@@ -6024,7 +6038,7 @@ lock_clust_rec_modify_check_and_lock(
 
 	ut_ad(lock_table_has(thr_get_trx(thr), index->table, LOCK_IX));
 
-	err = lock_rec_lock(TRUE, LOCK_X | LOCK_REC_NOT_GAP,
+	err = lock_rec_lock(TRUE, LOCK_X | LOCK_REC_NOT_GAP, no_wait,
 			    block, heap_no, index, thr);
 
 	MONITOR_INC(MONITOR_NUM_RECLOCK_REQ);
@@ -6043,12 +6057,15 @@ lock_clust_rec_modify_check_and_lock(
 /*********************************************************************//**
 Checks if locks of other transactions prevent an immediate modify (delete
 mark or delete unmark) of a secondary index record.
-@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, or DB_QUE_THR_SUSPENDED */
+@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, DB_QUE_THR_SUSPENDED, 
+or DB_LOCKING_SKIPPED */
 dberr_t
 lock_sec_rec_modify_check_and_lock(
 /*===============================*/
 	ulint		flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 				bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+							return DB_LOCKING_SKIPPED instead */
 	buf_block_t*	block,	/*!< in/out: buffer block of rec */
 	const rec_t*	rec,	/*!< in: record which should be
 				modified; NOTE: as this is a secondary
@@ -6085,7 +6102,7 @@ lock_sec_rec_modify_check_and_lock(
 
 	ut_ad(lock_table_has(thr_get_trx(thr), index->table, LOCK_IX));
 
-	err = lock_rec_lock(TRUE, LOCK_X | LOCK_REC_NOT_GAP,
+	err = lock_rec_lock(TRUE, LOCK_X | LOCK_REC_NOT_GAP, no_wait,
 			    block, heap_no, index, thr);
 
 	MONITOR_INC(MONITOR_NUM_RECLOCK_REQ);
@@ -6129,12 +6146,14 @@ lock_sec_rec_modify_check_and_lock(
 Like lock_clust_rec_read_check_and_lock(), but reads a
 secondary index record.
 @return DB_SUCCESS, DB_SUCCESS_LOCKED_REC, DB_LOCK_WAIT, DB_DEADLOCK,
-or DB_QUE_THR_SUSPENDED */
+DB_QUE_THR_SUSPENDED, or DB_LOCKING_SKIPPED */
 dberr_t
 lock_sec_rec_read_check_and_lock(
 /*=============================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+							return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: user record or page
 					supremum record which should
@@ -6188,7 +6207,7 @@ lock_sec_rec_read_check_and_lock(
 	ut_ad(mode != LOCK_S
 	      || lock_table_has(thr_get_trx(thr), index->table, LOCK_IS));
 
-	err = lock_rec_lock(FALSE, mode | gap_mode,
+	err = lock_rec_lock(FALSE, mode | gap_mode, no_wait,
 			    block, heap_no, index, thr);
 
 	MONITOR_INC(MONITOR_NUM_RECLOCK_REQ);
@@ -6205,15 +6224,18 @@ Checks if locks of other transactions prevent an immediate read, or passing
 over by a read cursor, of a clustered index record. If they do, first tests
 if the query thread should anyway be suspended for some reason; if not, then
 puts the transaction and the query thread to the lock wait state and inserts a
-waiting request for a record lock to the lock queue. Sets the requested mode
-lock on the record.
+waiting request for a record lock to the lock queue, unless no_wait==TRUE. 
+If no_wait==TRUE and lock wait is required then DB_LOCKING_SKIPPED is returned
+instead. Sets the requested mode lock on the record.
 @return DB_SUCCESS, DB_SUCCESS_LOCKED_REC, DB_LOCK_WAIT, DB_DEADLOCK,
-or DB_QUE_THR_SUSPENDED */
+DB_QUE_THR_SUSPENDED, or DB_LOCKING_SKIPPED */
 dberr_t
 lock_clust_rec_read_check_and_lock(
 /*===============================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+							return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: user record or page
 					supremum record which should
@@ -6261,7 +6283,7 @@ lock_clust_rec_read_check_and_lock(
 	ut_ad(mode != LOCK_S
 	      || lock_table_has(thr_get_trx(thr), index->table, LOCK_IS));
 
-	err = lock_rec_lock(FALSE, mode | gap_mode, block, heap_no, index, thr);
+	err = lock_rec_lock(FALSE, mode | gap_mode, no_wait, block, heap_no, index, thr);
 
 	MONITOR_INC(MONITOR_NUM_RECLOCK_REQ);
 
@@ -6282,12 +6304,15 @@ waiting request for a record lock to the lock queue. Sets the requested mode
 lock on the record. This is an alternative version of
 lock_clust_rec_read_check_and_lock() that does not require the parameter
 "offsets".
-@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, or DB_QUE_THR_SUSPENDED */
+@return DB_SUCCESS, DB_LOCK_WAIT, DB_DEADLOCK, DB_QUE_THR_SUSPENDED,
+or DB_LOCKING_SKIPPED */
 dberr_t
 lock_clust_rec_read_check_and_lock_alt(
 /*===================================*/
 	ulint			flags,	/*!< in: if BTR_NO_LOCKING_FLAG
 					bit is set, does nothing */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	const buf_block_t*	block,	/*!< in: buffer block of rec */
 	const rec_t*		rec,	/*!< in: user record or page
 					supremum record which should
@@ -6311,7 +6336,7 @@ lock_clust_rec_read_check_and_lock_alt(
 
 	offsets = rec_get_offsets(rec, index, offsets,
 				  ULINT_UNDEFINED, &tmp_heap);
-	err = lock_clust_rec_read_check_and_lock(flags, block, rec, index,
+	err = lock_clust_rec_read_check_and_lock(flags, no_wait, block, rec, index,
 						 offsets, mode, gap_mode, thr);
 	if (tmp_heap) {
 		mem_heap_free(tmp_heap);

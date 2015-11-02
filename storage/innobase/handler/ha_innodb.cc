@@ -14917,6 +14917,10 @@ ha_innobase::external_lock(
 		or SELECT ... FOR UPDATE */
 		m_prebuilt->select_lock_type = LOCK_X;
 		m_prebuilt->stored_select_lock_type = LOCK_X;
+		if (table->reginfo.skip_locked) {
+			m_prebuilt->select_skip_locked = TRUE;
+			DBUG_PRINT("ha_innobase::external_lock", ("zzz: skip locked"));
+		}
 	}
 
 	if (lock_type != F_UNLCK) {

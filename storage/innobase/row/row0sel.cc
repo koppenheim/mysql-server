@@ -877,6 +877,8 @@ row_sel_get_clust_rec(
 	sel_node_t*	node,	/*!< in: select_node */
 	plan_t*		plan,	/*!< in: plan node for table */
 	rec_t*		rec,	/*!< in: record in a non-clustered index */
+	ibool		no_wait,/*!< in: if TRUE, do not wait for lock:
+				return DB_LOCKING_SKIPPED instead */
 	que_thr_t*	thr,	/*!< in: query thread */
 	rec_t**		out_rec,/*!< out: clustered record or an old version of
 				it, NULL if the old version did not exist
@@ -957,7 +959,7 @@ row_sel_get_clust_rec(
 		}
 
 		err = lock_clust_rec_read_check_and_lock(
-			0, btr_pcur_get_block(&plan->clust_pcur),
+			0, no_wait, btr_pcur_get_block(&plan->clust_pcur),
 			clust_rec, index, offsets,
 			static_cast<lock_mode>(node->row_lock_mode),
 			lock_type,
@@ -1086,7 +1088,7 @@ retry:
 	ut_ad(page_is_leaf(buf_block_get_frame(cur_block)));
 
 	err = lock_sec_rec_read_check_and_lock(
-		0, cur_block, rec, index, my_offsets,
+		0, false, cur_block, rec, index, my_offsets,
 		static_cast<lock_mode>(mode), type, thr);
 
 	if (err == DB_LOCK_WAIT) {
@@ -1180,7 +1182,7 @@ re_scan:
 				ULINT_UNDEFINED, &heap);
 
 		err = lock_sec_rec_read_check_and_lock(
-			0, &match->block, rtr_rec->r_rec, index,
+			0, false, &match->block, rtr_rec->r_rec, index,
 			my_offsets, static_cast<lock_mode>(mode),
 			type, thr);
 
@@ -1222,6 +1224,8 @@ sel_set_rec_lock(
 	ulint			mode,	/*!< in: lock mode */
 	ulint			type,	/*!< in: LOCK_ORDINARY, LOCK_GAP, or
 					LOC_REC_NOT_GAP */
+	ibool			no_wait,/*!< in: if TRUE, do not wait for lock:
+					return DB_LOCKING_SKIPPED instead */
 	que_thr_t*		thr,	/*!< in: query thread */
 	mtr_t*			mtr)	/*!< in: mtr */
 {
@@ -1242,7 +1246,7 @@ sel_set_rec_lock(
 
 	if (dict_index_is_clust(index)) {
 		err = lock_clust_rec_read_check_and_lock(
-			0, block, rec, index, offsets,
+			0, no_wait, block, rec, index, offsets,
 			static_cast<lock_mode>(mode), type, thr);
 	} else {
 
@@ -1257,7 +1261,7 @@ sel_set_rec_lock(
 						   mode, type, thr, mtr);
 		} else {
 			err = lock_sec_rec_read_check_and_lock(
-				0, block, rec, index, offsets,
+				0, false, block, rec, index, offsets,
 				static_cast<lock_mode>(mode), type, thr);
 		}
 	}
@@ -1787,7 +1791,7 @@ rec_loop:
 			err = sel_set_rec_lock(&plan->pcur,
 					       next_rec, index, offsets,
 					       node->row_lock_mode,
-					       lock_type, thr, &mtr);
+					       lock_type, FALSE, thr, &mtr);
 
 			switch (err) {
 			case DB_SUCCESS_LOCKED_REC:
@@ -1849,7 +1853,7 @@ skip_lock:
 		err = sel_set_rec_lock(&plan->pcur,
 				       rec, index, offsets,
 				       node->row_lock_mode, lock_type,
-				       thr, &mtr);
+				       FALSE, thr, &mtr);
 
 		switch (err) {
 		case DB_SUCCESS_LOCKED_REC:
@@ -2020,12 +2024,12 @@ skip_lock:
 		/* It was a non-clustered index and we must fetch also the
 		clustered index record */
 
-		err = row_sel_get_clust_rec(node, plan, rec, thr, &clust_rec,
-					    &mtr);
+		err = row_sel_get_clust_rec(node, plan, rec, FALSE, thr,
+					    &clust_rec, &mtr);
 		mtr_has_extra_clust_latch = TRUE;
 
 		if (err != DB_SUCCESS) {
-
+                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 7"));
 			goto lock_wait_or_error;
 		}
 
@@ -3352,6 +3356,8 @@ row_sel_get_clust_rec_for_mysql(
 				this is a locking read, then rec is not
 				allowed to be delete-marked, and that would
 				not make sense either */
+	ibool		no_wait,/*!< in: if TRUE, do not wait for lock:
+				return DB_LOCKING_SKIPPED instead */
 	que_thr_t*	thr,	/*!< in: query thread */
 	const rec_t**	out_rec,/*!< out: clustered record or an old version of
 				it, NULL if the old version did not exist
@@ -3511,7 +3517,7 @@ row_sel_get_clust_rec_for_mysql(
 		we set a LOCK_REC_NOT_GAP type lock */
 
 		err = lock_clust_rec_read_check_and_lock(
-			0, btr_pcur_get_block(prebuilt->clust_pcur),
+			0, no_wait, btr_pcur_get_block(prebuilt->clust_pcur),
 			clust_rec, clust_index, *offsets,
 			static_cast<lock_mode>(prebuilt->select_lock_type),
 			LOCK_REC_NOT_GAP,
@@ -4274,8 +4280,9 @@ row_search_no_mvcc(
 		if (index != clust_index) {
 
 			err = row_sel_get_clust_rec_for_mysql(
-				prebuilt, index, rec, thr, &clust_rec,
-				&offsets, &heap, NULL, mtr);
+				prebuilt, index, rec, FALSE, /* TODOzzz */
+				thr, &clust_rec, &offsets,
+				&heap, NULL, mtr);
 
 			if (err != DB_SUCCESS) {
 				break;
@@ -4464,6 +4471,7 @@ row_search_mvcc(
 	ibool		mtr_has_extra_clust_latch	= FALSE;
 	ibool		moves_up			= FALSE;
 	ibool		set_also_gap_locks		= TRUE;
+	ibool		skip_locked			= prebuilt->select_skip_locked;
 	/* if the query is a plain locking SELECT, and the isolation level
 	is <= TRX_ISO_READ_COMMITTED, then this is set to FALSE */
 	ibool		did_semi_consistent_read	= FALSE;
@@ -4485,6 +4493,8 @@ row_search_mvcc(
 	ut_ad(index && pcur && search_tuple);
 	ut_a(prebuilt->magic_n == ROW_PREBUILT_ALLOCATED);
 	ut_a(prebuilt->magic_n2 == ROW_PREBUILT_ALLOCATED);
+
+	DBUG_PRINT("row_search_mvcc", ("zzz: skip_locked %d", (int)skip_locked));
 
 	/* We don't support FTS queries from the HANDLER interfaces, because
 	we implemented FTS as reversed inverted index with auxiliary tables.
@@ -4971,14 +4981,20 @@ wait_table_again:
 			err = sel_set_rec_lock(pcur,
 					       next_rec, index, offsets,
 					       prebuilt->select_lock_type,
-					       LOCK_GAP, thr, &mtr);
+					       LOCK_GAP, skip_locked, thr, &mtr);
 
 			switch (err) {
 			case DB_SUCCESS_LOCKED_REC:
 				err = DB_SUCCESS;
 			case DB_SUCCESS:
 				break;
+			case DB_LOCKING_SKIPPED:
+                                DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 1"));
+				if (skip_locked) {
+				    goto next_rec;
+				}
 			default:
+                                DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 1"));
 				goto lock_wait_or_error;
 			}
 		}
@@ -5015,7 +5031,7 @@ rec_loop:
 	}
 
 	if (page_rec_is_supremum(rec)) {
-
+                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 1"));
 		if (set_also_gap_locks
 		    && !(srv_locks_unsafe_for_binlog
 			 || trx->isolation_level <= TRX_ISO_READ_COMMITTED)
@@ -5034,14 +5050,21 @@ rec_loop:
 			err = sel_set_rec_lock(pcur,
 					       rec, index, offsets,
 					       prebuilt->select_lock_type,
-					       LOCK_ORDINARY, thr, &mtr);
+					       LOCK_ORDINARY, skip_locked,
+					       thr, &mtr);
 
 			switch (err) {
 			case DB_SUCCESS_LOCKED_REC:
 				err = DB_SUCCESS;
 			case DB_SUCCESS:
 				break;
+			case DB_LOCKING_SKIPPED:
+                                DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 2"));
+				if (skip_locked) {
+				    goto next_rec;
+				}
 			default:
+                                DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 2"));
 				goto lock_wait_or_error;
 			}
 		}
@@ -5119,7 +5142,7 @@ wrong_offs:
 	ut_ad(btr_page_get_index_id(btr_pcur_get_page(pcur)) == index->id);
 
 	offsets = rec_get_offsets(rec, index, offsets, ULINT_UNDEFINED, &heap);
-
+        DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 2"));
 	if (UNIV_UNLIKELY(srv_force_recovery > 0)) {
 		if (!rec_validate(rec, offsets)
 		    || !btr_index_rec_validate(rec, index, FALSE)) {
@@ -5146,6 +5169,7 @@ wrong_offs:
 		in prebuilt: if not, then we return with DB_RECORD_NOT_FOUND */
 
 		/* fputs("Comparing rec and search tuple\n", stderr); */
+                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 3"));
 
 		if (0 != cmp_dtuple_rec(search_tuple, rec, offsets)) {
 
@@ -5165,13 +5189,19 @@ wrong_offs:
 					pcur,
 					rec, index, offsets,
 					prebuilt->select_lock_type, LOCK_GAP,
-					thr, &mtr);
+					skip_locked, thr, &mtr);
 
 				switch (err) {
 				case DB_SUCCESS_LOCKED_REC:
 				case DB_SUCCESS:
 					break;
+				case DB_LOCKING_SKIPPED:
+                                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 3"));
+					if (skip_locked) {
+					    goto next_rec;
+					}
 				default:
+                                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 3"));
 					goto lock_wait_or_error;
 				}
 			}
@@ -5191,7 +5221,7 @@ wrong_offs:
 		}
 
 	} else if (match_mode == ROW_SEL_EXACT_PREFIX) {
-
+                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 4"));
 		if (!cmp_dtuple_is_prefix_of_rec(search_tuple, rec, offsets)) {
 
 			if (set_also_gap_locks
@@ -5205,18 +5235,24 @@ wrong_offs:
 				record only if innodb_locks_unsafe_for_binlog
 				option is not set or this session is not
 				using a READ COMMITTED isolation level. */
-
+                                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 5"));
 				err = sel_set_rec_lock(
 					pcur,
 					rec, index, offsets,
 					prebuilt->select_lock_type, LOCK_GAP,
-					thr, &mtr);
+					skip_locked, thr, &mtr);
 
 				switch (err) {
 				case DB_SUCCESS_LOCKED_REC:
 				case DB_SUCCESS:
 					break;
+				case DB_LOCKING_SKIPPED:
+                                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 4"));
+					if (skip_locked) {
+					    goto next_rec;
+					}
 				default:
+                                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCKING_WAIT 4"));
 					goto lock_wait_or_error;
 				}
 			}
@@ -5283,11 +5319,11 @@ wrong_offs:
 no_gap_lock:
 			lock_type = LOCK_REC_NOT_GAP;
 		}
-
+                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 7"));
 		err = sel_set_rec_lock(pcur,
 				       rec, index, offsets,
 				       prebuilt->select_lock_type,
-				       lock_type, thr, &mtr);
+				       lock_type, skip_locked, thr, &mtr);
 
 		switch (err) {
 			const rec_t*	old_vers;
@@ -5365,9 +5401,15 @@ no_gap_lock:
 			} else {
 				goto lock_wait_or_error;
 			}
-
+		case DB_LOCKING_SKIPPED:
+                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 5"));
+			if (skip_locked) {
+			    goto next_rec;
+			} else {
+			    goto lock_wait_or_error;
+			}
 		default:
-
+                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 5"));
 			goto lock_wait_or_error;
 		}
 	} else {
@@ -5529,8 +5571,9 @@ requires_clust_rec:
 		'clust_rec'. Note that 'clust_rec' can be an old version
 		built for a consistent read. */
 
+                DBUG_PRINT("row_search_mvcc", ("zzz: requires_clust_rec"));
 		err = row_sel_get_clust_rec_for_mysql(prebuilt, index, rec,
-						      thr, &clust_rec,
+						      skip_locked, thr, &clust_rec,
 						      &offsets, &heap,
 						      need_vrow ? &vrow : NULL,
 						      &mtr);
@@ -5555,7 +5598,13 @@ requires_clust_rec:
 			}
 			err = DB_SUCCESS;
 			break;
+		case DB_LOCKING_SKIPPED:
+                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 6"));
+			if (skip_locked) {
+			    goto next_rec;
+			}
 		default:
+                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 6"));
 			vrow = NULL;
 			goto lock_wait_or_error;
 		}

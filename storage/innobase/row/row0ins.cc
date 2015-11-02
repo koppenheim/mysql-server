@@ -1132,7 +1132,7 @@ row_ins_foreign_check_on_constraint(
 		gap if the search criterion was not unique */
 
 		err = lock_clust_rec_read_check_and_lock_alt(
-			0, clust_block, clust_rec, clust_index,
+			0, false, clust_block, clust_rec, clust_index,
 			LOCK_X, LOCK_REC_NOT_GAP, thr);
 	}
 
@@ -1353,10 +1353,10 @@ row_ins_set_shared_rec_lock(
 
 	if (dict_index_is_clust(index)) {
 		err = lock_clust_rec_read_check_and_lock(
-			0, block, rec, index, offsets, LOCK_S, type, thr);
+			0, false, block, rec, index, offsets, LOCK_S, type, thr);
 	} else {
 		err = lock_sec_rec_read_check_and_lock(
-			0, block, rec, index, offsets, LOCK_S, type, thr);
+			0, false, block, rec, index, offsets, LOCK_S, type, thr);
 	}
 
 	return(err);
@@ -1384,10 +1384,10 @@ row_ins_set_exclusive_rec_lock(
 
 	if (dict_index_is_clust(index)) {
 		err = lock_clust_rec_read_check_and_lock(
-			0, block, rec, index, offsets, LOCK_X, type, thr);
+			0, false, block, rec, index, offsets, LOCK_X, type, thr);
 	} else {
 		err = lock_sec_rec_read_check_and_lock(
-			0, block, rec, index, offsets, LOCK_X, type, thr);
+			0, false, block, rec, index, offsets, LOCK_X, type, thr);
 	}
 
 	return(err);

@@ -5801,6 +5801,12 @@ restart:
           tbl->reginfo.lock_type=
             read_lock_type_for_table(thd, thd->lex, tables,
                                      some_routine_modifies_data);
+      else if (tables->lock_type == TL_WRITE)
+      {
+          DBUG_PRINT("open_tables", ("zzz: setting lock_type %d ***", (int) tables->lock_type));
+          tbl->reginfo.lock_type= tables->lock_type;
+          tbl->reginfo.skip_locked= tables->skip_locked;
+      }
       else
         tbl->reginfo.lock_type= tables->lock_type;
     }

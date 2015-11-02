@@ -1217,7 +1217,7 @@ public:
   // Add full-text function elements from a list into this query block
   bool add_ftfunc_list(List<Item_func_match> *ftfuncs);
 
-  void set_lock_for_tables(thr_lock_type lock_type);
+  void set_lock_for_tables(thr_lock_type lock_type, bool skip_locked);
   inline void init_order()
   {
     DBUG_ASSERT(order_list.elements == 0);
@@ -1507,6 +1507,7 @@ struct Select_lock_type
   bool is_set;
   thr_lock_type lock_type;
   bool is_safe_to_cache_query;
+  bool skip_locked;
 };
 
 
