@@ -1235,7 +1235,7 @@ public:
     class JOIN_TAB *join_tab;
     class QEP_TAB *qep_tab;
     enum thr_lock_type lock_type;		/* How table is used */
-    bool skip_locked;				/* Used by SELECT ... FOR 
+    bool skip_locked;				/* Used by SELECT ... FOR
 						UPDATE SKIP LOCKED */
     bool not_exists_optimize;
     /*

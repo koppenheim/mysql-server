@@ -14919,7 +14919,6 @@ ha_innobase::external_lock(
 		m_prebuilt->stored_select_lock_type = LOCK_X;
 		if (table->reginfo.skip_locked) {
 			m_prebuilt->select_skip_locked = TRUE;
-			DBUG_PRINT("ha_innobase::external_lock", ("zzz: skip locked"));
 		}
 	}
 

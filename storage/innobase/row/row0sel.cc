@@ -1261,7 +1261,7 @@ sel_set_rec_lock(
 						   mode, type, thr, mtr);
 		} else {
 			err = lock_sec_rec_read_check_and_lock(
-				0, false, block, rec, index, offsets,
+				0, no_wait, block, rec, index, offsets,
 				static_cast<lock_mode>(mode), type, thr);
 		}
 	}
@@ -2029,7 +2029,6 @@ skip_lock:
 		mtr_has_extra_clust_latch = TRUE;
 
 		if (err != DB_SUCCESS) {
-                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 7"));
 			goto lock_wait_or_error;
 		}
 
@@ -4280,7 +4279,7 @@ row_search_no_mvcc(
 		if (index != clust_index) {
 
 			err = row_sel_get_clust_rec_for_mysql(
-				prebuilt, index, rec, FALSE, /* TODOzzz */
+				prebuilt, index, rec, FALSE,
 				thr, &clust_rec, &offsets,
 				&heap, NULL, mtr);
 
@@ -4493,8 +4492,6 @@ row_search_mvcc(
 	ut_ad(index && pcur && search_tuple);
 	ut_a(prebuilt->magic_n == ROW_PREBUILT_ALLOCATED);
 	ut_a(prebuilt->magic_n2 == ROW_PREBUILT_ALLOCATED);
-
-	DBUG_PRINT("row_search_mvcc", ("zzz: skip_locked %d", (int)skip_locked));
 
 	/* We don't support FTS queries from the HANDLER interfaces, because
 	we implemented FTS as reversed inverted index with auxiliary tables.
@@ -4989,12 +4986,10 @@ wait_table_again:
 			case DB_SUCCESS:
 				break;
 			case DB_LOCKING_SKIPPED:
-                                DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 1"));
 				if (skip_locked) {
 				    goto next_rec;
 				}
 			default:
-                                DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 1"));
 				goto lock_wait_or_error;
 			}
 		}
@@ -5031,7 +5026,7 @@ rec_loop:
 	}
 
 	if (page_rec_is_supremum(rec)) {
-                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 1"));
+
 		if (set_also_gap_locks
 		    && !(srv_locks_unsafe_for_binlog
 			 || trx->isolation_level <= TRX_ISO_READ_COMMITTED)
@@ -5059,12 +5054,10 @@ rec_loop:
 			case DB_SUCCESS:
 				break;
 			case DB_LOCKING_SKIPPED:
-                                DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 2"));
 				if (skip_locked) {
 				    goto next_rec;
 				}
 			default:
-                                DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 2"));
 				goto lock_wait_or_error;
 			}
 		}
@@ -5142,7 +5135,7 @@ wrong_offs:
 	ut_ad(btr_page_get_index_id(btr_pcur_get_page(pcur)) == index->id);
 
 	offsets = rec_get_offsets(rec, index, offsets, ULINT_UNDEFINED, &heap);
-        DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 2"));
+
 	if (UNIV_UNLIKELY(srv_force_recovery > 0)) {
 		if (!rec_validate(rec, offsets)
 		    || !btr_index_rec_validate(rec, index, FALSE)) {
@@ -5169,7 +5162,6 @@ wrong_offs:
 		in prebuilt: if not, then we return with DB_RECORD_NOT_FOUND */
 
 		/* fputs("Comparing rec and search tuple\n", stderr); */
-                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 3"));
 
 		if (0 != cmp_dtuple_rec(search_tuple, rec, offsets)) {
 
@@ -5196,12 +5188,10 @@ wrong_offs:
 				case DB_SUCCESS:
 					break;
 				case DB_LOCKING_SKIPPED:
-                                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 3"));
 					if (skip_locked) {
 					    goto next_rec;
 					}
 				default:
-                                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 3"));
 					goto lock_wait_or_error;
 				}
 			}
@@ -5221,7 +5211,7 @@ wrong_offs:
 		}
 
 	} else if (match_mode == ROW_SEL_EXACT_PREFIX) {
-                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 4"));
+
 		if (!cmp_dtuple_is_prefix_of_rec(search_tuple, rec, offsets)) {
 
 			if (set_also_gap_locks
@@ -5235,7 +5225,7 @@ wrong_offs:
 				record only if innodb_locks_unsafe_for_binlog
 				option is not set or this session is not
 				using a READ COMMITTED isolation level. */
-                                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 5"));
+
 				err = sel_set_rec_lock(
 					pcur,
 					rec, index, offsets,
@@ -5247,12 +5237,10 @@ wrong_offs:
 				case DB_SUCCESS:
 					break;
 				case DB_LOCKING_SKIPPED:
-                                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 4"));
 					if (skip_locked) {
 					    goto next_rec;
 					}
 				default:
-                                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCKING_WAIT 4"));
 					goto lock_wait_or_error;
 				}
 			}
@@ -5319,7 +5307,7 @@ wrong_offs:
 no_gap_lock:
 			lock_type = LOCK_REC_NOT_GAP;
 		}
-                DBUG_PRINT("row_search_mvcc", ("zzz: tracepoint 7"));
+
 		err = sel_set_rec_lock(pcur,
 				       rec, index, offsets,
 				       prebuilt->select_lock_type,
@@ -5402,14 +5390,12 @@ no_gap_lock:
 				goto lock_wait_or_error;
 			}
 		case DB_LOCKING_SKIPPED:
-                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 5"));
 			if (skip_locked) {
 			    goto next_rec;
 			} else {
 			    goto lock_wait_or_error;
 			}
 		default:
-                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 5"));
 			goto lock_wait_or_error;
 		}
 	} else {
@@ -5571,7 +5557,6 @@ requires_clust_rec:
 		'clust_rec'. Note that 'clust_rec' can be an old version
 		built for a consistent read. */
 
-                DBUG_PRINT("row_search_mvcc", ("zzz: requires_clust_rec"));
 		err = row_sel_get_clust_rec_for_mysql(prebuilt, index, rec,
 						      skip_locked, thr, &clust_rec,
 						      &offsets, &heap,
@@ -5599,12 +5584,10 @@ requires_clust_rec:
 			err = DB_SUCCESS;
 			break;
 		case DB_LOCKING_SKIPPED:
-                        DBUG_PRINT("row_search_mvcc", ("zzz: DB_LOCKING_SKIPPED 6"));
 			if (skip_locked) {
 			    goto next_rec;
 			}
 		default:
-                        DBUG_PRINT("row_search_mvcc", ("zzz: LOCK_WAIT 6"));
 			vrow = NULL;
 			goto lock_wait_or_error;
 		}

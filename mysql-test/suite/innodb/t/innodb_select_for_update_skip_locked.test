@@ -1,0 +1,47 @@
+-- source include/have_innodb.inc
+
+#
+# t1 uses a primary key
+#
+CREATE TABLE t1(a INT, b INT NOT NULL, PRIMARY KEY (a)) ENGINE=innodb;
+INSERT INTO t1 VALUES (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7);
+
+#
+# t2 uses a unique secondary index
+#
+CREATE TABLE t2(a INT, b INT NOT NULL, UNIQUE INDEX (a)) ENGINE=innodb;
+INSERT INTO t2 VALUES (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7);
+
+#
+# con1 will lock 1 row, con2 will use SKIP LOCKED to lock another row
+#
+CONNECT (con1,localhost,root,,);
+CONNECT (con2,localhost,root,,);
+
+
+# Test with table t1
+CONNECTION con1;
+START TRANSACTION;
+SELECT * FROM t1 WHERE a < 5 ORDER BY a DESC LIMIT 1 FOR UPDATE;
+CONNECTION con2;
+START TRANSACTION;
+SELECT * FROM t1 WHERE a < 5 ORDER BY A DESC LIMIT 1 FOR UPDATE SKIP LOCKED;
+ROLLBACK;
+
+# Test with table t2
+CONNECTION con1;
+START TRANSACTION;
+SELECT * FROM t2 WHERE a > 4 LIMIT 1 FOR UPDATE;
+CONNECTION con2;
+START TRANSACTION;
+SELECT * FROM t2 WHERE a > 4 LIMIT 1 FOR UPDATE SKIP LOCKED;
+ROLLBACK;
+
+#
+# clean up
+#
+CONNECTION default;
+DISCONNECT con1;
+DISCONNECT con2;
+DROP TABLE t1;
+DROP TABLE t2;
